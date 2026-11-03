@@ -2,42 +2,63 @@
 - name: Install and configure video player
   hosts: video_player
   become: true
+  vars_files:
+    - ../vars/vault.yml
+    - ../vars/program_versions.yml
   vars:
     repo_dir: "/home/{{ ansible_user }}/video-player"
     repo_url: "https://github.com/tu-studio/video-server.git"
+    local_temp_dir: "/tmp/video-server"
 
   tasks:
-    - name: Install packages
+    - name: Clone video-server locally on control machine
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ local_temp_dir }}"
+        version: "{{ video_player_version }}"
+        update: true
+      delegate_to: localhost
+      run_once: true
+      become: false
+
+    - name: Install packages (if repository cache available)
       ansible.builtin.apt:
         name:
           - mpv
           - socat
         state: present
 
-    - name: Clone video-server repository
-      ansible.builtin.git:
-        repo: "{{ repo_url }}"
-        dest: "{{ repo_dir }}"
-        version: main
-        update: true
-      become_user: "{{ ansible_user }}"
+    - name: Ensure target video-player directory exists
+      ansible.builtin.file:
+        path: "{{ repo_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: avm
+        mode: "0755"
+
+    - name: Copy video-server files from controller to target host
+      ansible.builtin.copy:
+        src: "{{ local_temp_dir }}/"
+        dest: "{{ repo_dir }}/"
+        owner: "{{ ansible_user }}"
+        group: avm
+        mode: "0755"
 
     - name: Ensure ~/.config/mpv directory exists
       ansible.builtin.file:
         path: "/home/{{ ansible_user }}/.config/mpv"
         state: directory
         owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
+        group: avm
         mode: "0755"
 
     - name: Generate ~/.config/mpv/mpv.conf from template
       ansible.builtin.template:
-        src: "{{ repo_dir }}/mpv.conf.j2"
+        src: "{{ local_temp_dir }}/mpv.conf.j2"
         dest: "/home/{{ ansible_user }}/.config/mpv/mpv.conf"
         owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
+        group: avm
         mode: "0644"
-        remote_src: true
 
     - name: Ensure /etc/systemd/user directory exists
       ansible.builtin.file:
@@ -49,9 +70,8 @@
 
     - name: Copy user service units to /etc/systemd/user
       ansible.builtin.copy:
-        src: "{{ repo_dir }}/systemd/{{ item }}"
+        src: "{{ local_temp_dir }}/systemd/{{ item }}"
         dest: "/etc/systemd/user/{{ item }}"
-        remote_src: true
         owner: root
         group: root
         mode: "0644"
