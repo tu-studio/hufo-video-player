@@ -36,13 +36,19 @@
         group: avm
         mode: "0755"
 
-    - name: Copy video-server files from controller to target host
-      ansible.builtin.copy:
+    # for some reason, this is a million times faster than just using built in copy
+    - name: Synchronize video-server files from controller to target host
+      ansible.posix.synchronize:
         src: "{{ local_temp_dir }}/"
         dest: "{{ repo_dir }}/"
+      become: false
+
+    - name: Set ownership of video-server files
+      ansible.builtin.file:
+        path: "{{ repo_dir }}"
         owner: "{{ ansible_user }}"
         group: avm
-        mode: "0755"
+        recurse: true
 
     - name: Ensure ~/.config/mpv directory exists
       ansible.builtin.file:
