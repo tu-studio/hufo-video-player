@@ -1,0 +1,77 @@
+---
+- name: Install and configure video player
+  hosts: video_player
+  become: true
+  vars:
+    repo_dir: "/home/{{ ansible_user }}/video-player"
+    repo_url: "https://github.com/tu-studio/video-server.git"
+
+  tasks:
+    - name: Install packages
+      ansible.builtin.apt:
+        name:
+          - mpv
+          - socat
+        state: present
+
+    - name: Clone video-server repository
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ repo_dir }}"
+        version: main
+        update: true
+      become_user: "{{ ansible_user }}"
+
+    - name: Ensure ~/.config/mpv directory exists
+      ansible.builtin.file:
+        path: "/home/{{ ansible_user }}/.config/mpv"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    - name: Generate ~/.config/mpv/mpv.conf from template
+      ansible.builtin.template:
+        src: "{{ repo_dir }}/mpv.conf.j2"
+        dest: "/home/{{ ansible_user }}/.config/mpv/mpv.conf"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0644"
+        remote_src: true
+
+    - name: Ensure /etc/systemd/user directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/user
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy user service units to /etc/systemd/user
+      ansible.builtin.copy:
+        src: "{{ repo_dir }}/systemd/{{ item }}"
+        dest: "/etc/systemd/user/{{ item }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - mpv.service
+        - mpv-udp-bridge.service
+
+    - name: Systemd user daemon reload
+      ansible.builtin.systemd:
+        daemon_reload: true
+        scope: user
+      become_user: "{{ ansible_user }}"
+
+    - name: Enable and restart systemd user services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: restarted
+        scope: user
+      become_user: "{{ ansible_user }}"
+      loop:
+        - mpv-udp-bridge.service
+        - mpv.service

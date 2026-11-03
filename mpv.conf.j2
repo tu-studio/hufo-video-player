@@ -9,7 +9,7 @@ reset-on-next-file=pause
 loop-playlist
 
 # Multi-player synchronization (mpv-sync.lua)
-script={{ content_dir | default('/home/' ~ ansible_user ~ '/content') }}/mpv-sync.lua
+script={{ repo_dir | default('/home/' ~ ansible_user ~ '/video-player') }}/mpv-sync.lua
 
 {% if inventory_hostname == groups['video_player'][0] %}
 # Role: LEADER (controlling all followers)
